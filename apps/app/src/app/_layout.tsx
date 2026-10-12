@@ -12,6 +12,7 @@ export default function RootLayout() {
         <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
         <Stack.Screen name="linked" options={{ title: 'Linking your bank' }} />
         <Stack.Screen name="transactions" options={{ title: 'Transactions' }} />
+        <Stack.Screen name="spending" options={{ title: 'Spending' }} />
       </Stack>
     </AuthProvider>
   );

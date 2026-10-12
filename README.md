@@ -28,7 +28,7 @@ On a physical phone, set `EXPO_PUBLIC_API_URL` to your computer's LAN IP, not `l
 
 ## Bank linking (Finverse sandbox)
 
-1. Run `supabase/migrations/20261012000000_bank_data.sql` in the Supabase SQL editor (or `supabase db push`).
+1. Run the files in `supabase/migrations` in order in the Supabase SQL editor (or `supabase db push`).
 2. In `apps/api/.env`, fill in `SUPABASE_SERVICE_ROLE_KEY`, the Finverse client ID and secret, and `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`).
 3. Register `FINVERSE_REDIRECT_URI` (default `http://localhost:4000/link/callback`) as a redirect URI in the Finverse developer portal, and confirm the sandbox API host there.
 4. In the app, tap **Link a bank**, pick a sandbox bank, and log in with its test credentials. The app then polls `/sync` until Finverse has the data.

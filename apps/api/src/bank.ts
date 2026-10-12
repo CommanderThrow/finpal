@@ -1,5 +1,6 @@
 import formbody from '@fastify/formbody';
 import type { FastifyInstance, FastifyReply, preHandlerHookHandler } from 'fastify';
+import { addMonths, monthlySpending, monthRange } from '@finpal/shared';
 import { z } from 'zod';
 
 import type { Sealer } from './crypto';
@@ -34,10 +35,26 @@ const callbackParams = z.object({
   error: z.string().optional(),
   error_description: z.string().optional(),
 });
-const pageQuery = z.object({
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const transactionQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
+  search: z.string().max(100).optional(),
+  category: z.string().max(100).optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
 });
+const categoryBody = z.object({
+  category: z.string().trim().min(1).max(100),
+  /** Also file every transaction from this merchant, now and later, under the category. */
+  applyToMerchant: z.boolean().default(false),
+});
+const spendingQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
+
+/** Months of history the spending averages cover. */
+const AVERAGE_MONTHS = 3;
+/** Enough rows for several months of normal spending; the view only needs totals. */
+const SPENDING_ROW_LIMIT = 5000;
 
 export async function bankRoutes(app: FastifyInstance, deps: BankDeps, auth: preHandlerHookHandler) {
   const { finverse, store, sealer, appRedirects } = deps;
@@ -84,9 +101,33 @@ export async function bankRoutes(app: FastifyInstance, deps: BankDeps, auth: pre
   }));
 
   app.get('/transactions', { preHandler: auth }, async (request, reply) => {
-    const page = pageQuery.safeParse(request.query);
-    if (!page.success) return reply.code(400).send({ error: 'invalid paging' });
-    return { transactions: await store.listTransactions(request.userId, page.data) };
+    const query = transactionQuery.safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: 'invalid transaction query' });
+    return { transactions: await store.listTransactions(request.userId, query.data) };
+  });
+
+  app.patch<{ Params: { id: string } }>('/transactions/:id', { preHandler: auth }, async (request, reply) => {
+    const body = categoryBody.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'category is required' });
+    const updated = await store.setCategory(request.userId, request.params.id, body.data.category);
+    if (!updated) return reply.code(404).send({ error: 'transaction not found' });
+    if (body.data.applyToMerchant && updated.merchantName) {
+      await store.setMerchantRule(request.userId, updated.merchantName, body.data.category);
+    }
+    return { transaction: updated };
+  });
+
+  app.get('/spending', { preHandler: auth }, async (request, reply) => {
+    const query = spendingQuery.safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: 'month must look like 2026-10' });
+    const { month } = query.data;
+    const transactions = await store.listTransactions(request.userId, {
+      limit: SPENDING_ROW_LIMIT,
+      offset: 0,
+      from: monthRange(addMonths(month, -AVERAGE_MONTHS)).from,
+      to: monthRange(month).to,
+    });
+    return monthlySpending(transactions, month, AVERAGE_MONTHS);
   });
 }
 
@@ -101,6 +142,8 @@ export async function bankNotConfigured(app: FastifyInstance) {
     ['POST', '/sync'],
     ['GET', '/accounts'],
     ['GET', '/transactions'],
+    ['PATCH', '/transactions/:id'],
+    ['GET', '/spending'],
   ] as const) {
     app.route({ method, url, handler: reply503 });
   }

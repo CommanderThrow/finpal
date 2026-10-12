@@ -59,9 +59,14 @@ export default function Home() {
         <Text style={styles.primaryText}>{linking ? 'Opening Finverse…' : 'Link a bank'}</Text>
       </Pressable>
       {accounts && accounts.length > 0 ? (
-        <Link href="/transactions" style={styles.link}>
-          See transactions
-        </Link>
+        <>
+          <Link href="/transactions" style={styles.link}>
+            See transactions
+          </Link>
+          <Link href="/spending" style={styles.link}>
+            Spending by category
+          </Link>
+        </>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Pressable style={styles.button} onPress={() => supabase.auth.signOut()}>
