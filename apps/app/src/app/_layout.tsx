@@ -10,6 +10,8 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="index" options={{ title: 'Finpal' }} />
         <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
+        <Stack.Screen name="linked" options={{ title: 'Linking your bank' }} />
+        <Stack.Screen name="transactions" options={{ title: 'Transactions' }} />
       </Stack>
     </AuthProvider>
   );
