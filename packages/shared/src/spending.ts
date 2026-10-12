@@ -19,6 +19,9 @@ export const DEFAULT_CATEGORIES = [
   UNCATEGORISED,
 ];
 
+/** Money moving between your own accounts, or coming in, is not spending. */
+export const NON_SPENDING_CATEGORIES = new Set(['Transfers', 'Income']);
+
 /** "2026-10-03" → "2026-10". */
 export const monthOf = (date: string) => date.slice(0, 7);
 
@@ -55,7 +58,7 @@ export interface MonthlySpending {
 
 /**
  * Money out per category for `month`, next to the average of the `averageMonths`
- * months before it. Money in (positive amounts) is ignored.
+ * months before it. Money in (positive amounts) and NON_SPENDING_CATEGORIES are ignored.
  */
 export function monthlySpending(
   transactions: Transaction[],
@@ -72,6 +75,7 @@ export function monthlySpending(
     const bucket = m === month ? current : earlier.has(m) ? past : null;
     if (!bucket) continue;
     const category = t.category || UNCATEGORISED;
+    if (NON_SPENDING_CATEGORIES.has(category)) continue;
     bucket.set(category, (bucket.get(category) ?? 0) + -t.amount);
   }
 

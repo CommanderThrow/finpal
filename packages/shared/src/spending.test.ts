@@ -35,6 +35,7 @@ describe('monthlySpending', () => {
     tx('2026-10-15', -50.25, 'Groceries'),
     tx('2026-10-20', -30, null),
     tx('2026-10-25', 5000, 'Income'),
+    tx('2026-10-26', -2000, 'Transfers'),
     tx('2026-09-10', -120, 'Groceries'),
     tx('2026-08-10', -90, 'Groceries'),
     tx('2026-07-10', -90, 'Groceries'),
@@ -53,9 +54,10 @@ describe('monthlySpending', () => {
     expect(result.averageTotal).toBe(120);
   });
 
-  it('ignores money in and months outside the window', () => {
+  it('ignores money in, transfers and months outside the window', () => {
     const result = monthlySpending(data, '2026-10', 1);
     expect(result.categories.find((c) => c.category === 'Income')).toBeUndefined();
+    expect(result.categories.find((c) => c.category === 'Transfers')).toBeUndefined();
     expect(result.categories.find((c) => c.category === 'Groceries')?.average).toBe(120);
   });
 });
