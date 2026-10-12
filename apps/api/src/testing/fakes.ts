@@ -1,7 +1,7 @@
-import type { Account, Transaction } from '@finpal/shared';
+import { UNCATEGORISED, type Account, type Transaction } from '@finpal/shared';
 
 import type { BankTokens, FinverseClient } from '../finverse';
-import type { Connection, Store } from '../store';
+import type { Connection, Store, TransactionQuery } from '../store';
 
 export const TEST_KEY = Buffer.alloc(32, 7).toString('base64');
 
@@ -92,7 +92,34 @@ export class MemoryStore implements Store {
   async listAccounts() {
     return this.accounts;
   }
-  async listTransactions() {
-    return this.transactions;
+  rules = new Map<string, string>();
+
+  async listTransactions(_userId: string, q: TransactionQuery) {
+    const term = q.search?.toLowerCase();
+    return this.transactions
+      .filter((t) => !q.from || t.postedDate >= q.from)
+      .filter((t) => !q.to || t.postedDate <= q.to)
+      .filter((t) => !q.category || (t.category ?? UNCATEGORISED) === q.category)
+      .filter(
+        (t) =>
+          !term || t.description.toLowerCase().includes(term) || !!t.merchantName?.toLowerCase().includes(term),
+      )
+      .slice(q.offset, q.offset + q.limit);
+  }
+  async setCategory(_userId: string, id: string, category: string) {
+    const t = this.transactions.find((x) => x.id === id);
+    if (!t) return null;
+    t.category = category;
+    return t;
+  }
+  async setMerchantRule(_userId: string, merchantName: string, category: string) {
+    this.rules.set(merchantName, category);
+    for (const t of this.transactions) if (t.merchantName === merchantName) t.category = category;
+  }
+  async applyCategoryRules() {
+    for (const t of this.transactions) {
+      const rule = t.merchantName ? this.rules.get(t.merchantName) : undefined;
+      if (rule) t.category = rule;
+    }
   }
 }

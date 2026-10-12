@@ -1,4 +1,4 @@
-import type { Account, Transaction } from '@finpal/shared';
+import { UNCATEGORISED, type Account, type Transaction } from '@finpal/shared';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Sealer } from './crypto';
@@ -10,6 +10,18 @@ export interface Connection extends BankTokens {
   status: string;
 }
 
+export interface TransactionQuery {
+  limit: number;
+  offset: number;
+  /** Matches description or merchant name, case-insensitively. */
+  search?: string;
+  /** Effective category; UNCATEGORISED matches transactions with none. */
+  category?: string;
+  /** Inclusive YYYY-MM-DD bounds on the posted date. */
+  from?: string;
+  to?: string;
+}
+
 export interface Store {
   /** Saves a new connection, or replaces the tokens of a relinked one. */
   saveConnection(userId: string, tokens: BankTokens): Promise<void>;
@@ -18,10 +30,31 @@ export interface Store {
   saveAccounts(userId: string, connectionId: string, accounts: Account[]): Promise<void>;
   saveTransactions(userId: string, transactions: Transaction[]): Promise<void>;
   listAccounts(userId: string): Promise<Account[]>;
-  listTransactions(userId: string, page: { limit: number; offset: number }): Promise<Transaction[]>;
+  listTransactions(userId: string, query: TransactionQuery): Promise<Transaction[]>;
+  /** Sets the user's own category on one transaction; null if it isn't theirs. */
+  setCategory(userId: string, transactionId: string, category: string): Promise<Transaction | null>;
+  /** Files every transaction from a merchant, now and on future syncs, under a category. */
+  setMerchantRule(userId: string, merchantName: string, category: string): Promise<void>;
+  /** Applies the user's merchant rules to transactions they haven't categorised themselves. */
+  applyCategoryRules(userId: string): Promise<void>;
 }
 
 const BATCH = 500;
+
+/** Characters PostgREST treats as syntax inside an or() filter. */
+const stripFilterSyntax = (text: string) => text.replace(/[,()*"\\%]/g, ' ').trim();
+
+const toTransaction = (r: any): Transaction => ({
+  id: r.id,
+  accountId: r.account_id,
+  postedDate: r.posted_date ?? '',
+  amount: Number(r.amount),
+  currency: r.currency,
+  description: r.description,
+  merchantName: r.merchant_name,
+  category: r.effective_category,
+  isPending: r.is_pending,
+});
 
 export function createSupabaseStore(url: string, serviceRoleKey: string, sealer: Sealer): Store {
   const db: SupabaseClient = createClient(url, serviceRoleKey, {
@@ -129,27 +162,59 @@ export function createSupabaseStore(url: string, serviceRoleKey: string, sealer:
       }));
     },
 
-    async listTransactions(userId, { limit, offset }) {
+    async listTransactions(userId, { limit, offset, search, category, from, to }) {
+      let q = db.from('transactions').select('*').eq('user_id', userId);
+      if (from) q = q.gte('posted_date', from);
+      if (to) q = q.lte('posted_date', to);
+      if (category === UNCATEGORISED) q = q.is('effective_category', null);
+      else if (category) q = q.eq('effective_category', category);
+      const term = search ? stripFilterSyntax(search) : '';
+      if (term) q = q.or(`description.ilike.*${term}*,merchant_name.ilike.*${term}*`);
+      const rows =
+        check(await q.order('posted_date', { ascending: false }).order('id').range(offset, offset + limit - 1)) ?? [];
+      return rows.map(toTransaction);
+    },
+
+    async setCategory(userId, transactionId, category) {
       const rows =
         check(
           await db
             .from('transactions')
-            .select('*')
+            .update({ user_category: category, updated_at: new Date().toISOString() })
             .eq('user_id', userId)
-            .order('posted_date', { ascending: false })
-            .range(offset, offset + limit - 1),
+            .eq('id', transactionId)
+            .select('*'),
         ) ?? [];
-      return rows.map((r) => ({
-        id: r.id,
-        accountId: r.account_id,
-        postedDate: r.posted_date ?? '',
-        amount: Number(r.amount),
-        currency: r.currency,
-        description: r.description,
-        merchantName: r.merchant_name,
-        category: r.user_category ?? r.category,
-        isPending: r.is_pending,
-      }));
+      return rows[0] ? toTransaction(rows[0]) : null;
+    },
+
+    async setMerchantRule(userId, merchantName, category) {
+      check(
+        await db
+          .from('category_rules')
+          .upsert({ user_id: userId, merchant_name: merchantName, category }, { onConflict: 'user_id,merchant_name' }),
+      );
+      check(
+        await db
+          .from('transactions')
+          .update({ user_category: category, updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('merchant_name', merchantName),
+      );
+    },
+
+    async applyCategoryRules(userId) {
+      const rules = check(await db.from('category_rules').select('*').eq('user_id', userId)) ?? [];
+      for (const rule of rules) {
+        check(
+          await db
+            .from('transactions')
+            .update({ user_category: rule.category })
+            .eq('user_id', userId)
+            .eq('merchant_name', rule.merchant_name)
+            .is('user_category', null),
+        );
+      }
     },
   };
 }

@@ -55,6 +55,8 @@ export async function syncUser(
     statuses.push('ready');
   }
 
+  if (statuses.includes('ready')) await store.applyCategoryRules(userId);
+
   // Report pending while anything is still coming, so the app keeps polling.
   const status: SyncStatus = statuses.includes('pending')
     ? 'pending'
