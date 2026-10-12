@@ -12,7 +12,7 @@ describe('api', () => {
   it('answers health checks without auth', async () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true });
+    expect(res.json()).toEqual({ ok: true, bankLinking: false });
   });
 
   it('rejects /me without a token', async () => {
@@ -29,5 +29,12 @@ describe('api', () => {
     const res = await app.inject({ method: 'GET', url: '/me', headers: { authorization: 'Bearer good' } });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ userId: 'user-1' });
+  });
+});
+
+describe('without Finverse settings', () => {
+  it('answers bank routes with 503', async () => {
+    const res = await app.inject({ method: 'POST', url: '/sync', headers: { authorization: 'Bearer good' } });
+    expect(res.statusCode).toBe(503);
   });
 });

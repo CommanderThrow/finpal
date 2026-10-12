@@ -22,3 +22,21 @@ export interface Transaction {
   category: string | null;
   isPending: boolean;
 }
+
+export interface Account {
+  id: string;
+  name: string;
+  type: string | null;
+  currency: string;
+  balance: number | null;
+  maskedNumber: string | null;
+}
+
+/** Overall state of a user's bank data after a sync. */
+export type SyncStatus = 'none' | 'pending' | 'ready' | 'error';
+
+export interface SyncResult {
+  status: SyncStatus;
+  accounts: number;
+  transactions: number;
+}
