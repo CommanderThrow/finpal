@@ -1,0 +1,14 @@
+{
+  "name": "finpal",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "app": "pnpm --filter @finpal/app start",
+    "api": "pnpm --filter @finpal/api dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
